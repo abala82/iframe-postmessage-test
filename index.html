@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>postMessage Test Page</title>
+    <style>
+        body { font-family: sans-serif; padding: 24px; background: #f4f6f9; }
+        h2 { color: #0070d2; }
+        button { padding: 10px 20px; margin: 6px 4px; background: #0070d2; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+        button:hover { background: #005fb2; }
+        #log { margin-top: 20px; background: white; border: 1px solid #ddd; border-radius: 4px; padding: 12px; min-height: 100px; font-family: monospace; font-size: 13px; white-space: pre-wrap; }
+        .entry { border-bottom: 1px solid #eee; padding: 4px 0; }
+        .sent { color: #2e7d32; }
+        .received { color: #1565c0; }
+    </style>
+</head>
+<body>
+    <h2>iframe postMessage Test</h2>
+    <p>This page sends <code>window.postMessage</code> events to its parent and logs any messages it receives back.</p>
+
+    <button onclick="sendMessage('hello')">Send: hello</button>
+    <button onclick="sendMessage('ping')">Send: ping</button>
+    <button onclick="sendMessage('payment_ready', { amount: 42.00, method: 'credit_card' })">Send: payment_ready</button>
+    <button onclick="sendMessage('custom')">Send: custom</button>
+
+    <div id="log"><em>Event log will appear here...</em></div>
+
+    <script>
+        const log = document.getElementById('log');
+
+        function appendLog(text, cls) {
+            const ts = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = 'entry ' + cls;
+            div.textContent = '[' + ts + '] ' + text;
+            if (log.querySelector('em')) log.innerHTML = '';
+            log.prepend(div);
+        }
+
+        function sendMessage(type, payload) {
+            const msg = { type, payload: payload || {}, source: 'iframe-test' };
+            window.parent.postMessage(msg, '*');
+            appendLog('SENT → parent: ' + JSON.stringify(msg), 'sent');
+        }
+
+        window.addEventListener('message', (event) => {
+            appendLog('RECEIVED ← ' + event.origin + ': ' + JSON.stringify(event.data), 'received');
+        });
+
+        // announce presence as soon as loaded
+        window.addEventListener('load', () => {
+            sendMessage('iframe_loaded');
+        });
+    </script>
+</body>
+</html>
