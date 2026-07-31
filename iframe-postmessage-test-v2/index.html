@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chase HPF Simulation v2</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #f4f6f9; }
+        .form-group { margin-bottom: 14px; }
+        label { display: block; font-size: 12px; font-weight: 600; color: #444; margin-bottom: 4px; }
+        input { width: 100%; padding: 8px 10px; border: 1px solid #c9c9c9; border-radius: 4px; font-size: 14px; }
+        input:focus { outline: none; border-color: #c00; box-shadow: 0 0 0 2px rgba(200,0,0,0.15); }
+        .row { display: flex; gap: 12px; }
+        .row .form-group { flex: 1; }
+        button { width: 100%; padding: 10px; background: #c00; color: white; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; margin-top: 4px; }
+        button:hover { background: #a00; }
+        .cancel-btn { background: #fff; color: #c00; border: 1px solid #c00; margin-top: 8px; }
+        .cancel-btn:hover { background: #fff3f3; }
+        #status { margin-top: 12px; font-size: 12px; color: #2e7d32; font-weight: 600; display: none; }
+        #error-msg { margin-top: 8px; font-size: 12px; color: #c23934; display: none; }
+        .bridge-note { font-size: 10px; color: #aaa; margin-top: 16px; border-top: 1px solid #eee; padding-top: 8px; }
+    </style>
+</head>
+<body>
+    <form id="ccForm" onsubmit="submitForm(event)">
+        <div class="form-group">
+            <label for="nameOnCard">Name on Card</label>
+            <input type="text" id="nameOnCard" placeholder="John Smith" autocomplete="cc-name"/>
+        </div>
+        <div class="form-group">
+            <label for="cardNumber">Card Number</label>
+            <input type="text" id="cardNumber" placeholder="1234 5678 9012 3456" maxlength="19"
+                   autocomplete="cc-number" oninput="formatCardNumber(this)" onchange="clearFormErrors()"/>
+        </div>
+        <div class="row">
+            <div class="form-group">
+                <label for="expiry">Expiration Date</label>
+                <input type="text" id="expiry" placeholder="MM/YY" maxlength="5"
+                       autocomplete="cc-exp" oninput="formatExpiry(this)" onchange="clearFormErrors()"/>
+            </div>
+            <div class="form-group">
+                <label for="cvv">CVV</label>
+                <input type="text" id="cvv" placeholder="123" maxlength="4"
+                       autocomplete="cc-csc" onchange="clearFormErrors()"/>
+            </div>
+        </div>
+        <div id="error-msg"></div>
+        <button type="submit">Validate Card</button>
+        <button type="button" class="cancel-btn" onclick="cancel()">Cancel</button>
+        <div id="status">✓ Card validated successfully.</div>
+    </form>
+    <div class="bridge-note">
+        v2 — communicates via hpfParent-sim.js bridge (Chase protocol)
+    </div>
+
+    <script>
+        // ── Chase HPF bridge protocol ──────────────────────────────────────────
+        // This page communicates using the Chase envelope format:
+        //   { __chaseHpf: true, type, payload }
+        // hpfParent-sim.js (or the real hpfParent.min.js) on the VF parent window
+        // intercepts these and calls the registered window callbacks:
+        //   window.completePayment / handleTransactionErrors / clearErrors / cancelPayment
+        // ───────────────────────────────────────────────────────────────────────
+        function sendToParent(type, payload) {
+            window.parent.postMessage(
+                { __chaseHpf: true, type: type, payload: payload || null },
+                '*'
+            );
+        }
+
+        function formatCardNumber(input) {
+            var v = input.value.replace(/\D/g, '').substring(0, 16);
+            input.value = v.match(/.{1,4}/g) ? v.match(/.{1,4}/g).join(' ') : v;
+        }
+
+        function formatExpiry(input) {
+            var v = input.value.replace(/\D/g, '').substring(0, 4);
+            if (v.length >= 3) v = v.substring(0, 2) + '/' + v.substring(2);
+            input.value = v;
+        }
+
+        function showError(fields) {
+            var el = document.getElementById('error-msg');
+            el.textContent = fields.map(function(f) { return f.status_message; }).join(' | ');
+            el.style.display = 'block';
+            sendToParent('handleTransactionErrors', fields);
+        }
+
+        function clearFormErrors() {
+            var el = document.getElementById('error-msg');
+            if (el.style.display === 'none') return;
+            el.textContent = '';
+            el.style.display = 'none';
+            sendToParent('clearErrors', null);
+        }
+
+        function cancel() {
+            sendToParent('cancelPayment', null);
+        }
+
+        function submitForm(event) {
+            event.preventDefault();
+            clearFormErrors();
+
+            var nameOnCard = document.getElementById('nameOnCard').value.trim();
+            var cardNumber = document.getElementById('cardNumber').value.replace(/\s/g, '');
+            var expiry     = document.getElementById('expiry').value.trim();
+            var cvv        = document.getElementById('cvv').value.trim();
+
+            var errors = [];
+            if (!nameOnCard)                     errors.push({ field: 'nameOnCard', status_message: 'Name on card is required.' });
+            if (cardNumber.length < 13)          errors.push({ field: 'cardNumber', status_message: 'Enter a valid card number.' });
+            if (!/^\d{2}\/\d{2}$/.test(expiry)) errors.push({ field: 'expiry',     status_message: 'Expiration must be MM/YY.' });
+            if (cvv.length < 3)                  errors.push({ field: 'cvv',        status_message: 'Enter a valid CVV.' });
+
+            if (errors.length) {
+                showError(errors);
+                return;
+            }
+
+            // Simulate Chase generating a one-time UID token
+            var uid = 'CHASE-UID-' + Math.random().toString(36).substring(2, 14).toUpperCase();
+            document.getElementById('status').style.display = 'block';
+
+            // Mirror Chase calling window.completePayment({ uid }) via the bridge
+            sendToParent('completePayment', { uid: uid });
+        }
+    </script>
+</body>
+</html>
